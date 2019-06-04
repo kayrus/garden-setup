@@ -125,6 +125,19 @@ landscape:
       image_tag: (( valid( tag ) ? tag :~~ ))
       image_repo: (( ~~ ))
       repo: "https://github.com/gardener/external-dns-management.git"
+    cert-manager:
+      controller:
+        <<: (( merge ))
+        tag: (( valid( branch ) -or valid( commit ) ? ~~ :helm_tag )) # only used for CRDs
+        repo: "https://github.com/jetstack/cert-manager.git"
+        helm_repo: "https://charts.jetstack.io"
+        helm_tag: "v0.8.0"
+      cert-dns-bridge:
+        <<: (( merge ))
+        tag: (( valid( branch ) -or valid( commit ) ? ~~ :"1.0.0" ))
+        image_tag: (( valid( tag ) ? tag :~~ ))
+        image_repo: (( ~~ ))
+        repo: "https://github.com/gardener/certificate-dns-bridge.git"
   iaas:
   etcd:
     <<: (( merge ))
@@ -135,6 +148,9 @@ landscape:
       credentials: (( iaas.credentials ))
   identity:
   gardener:
+  cert-manager:
+    <<: (( merge ))
+    server: live
   dns:
     <<: (( merge ))
     type: (( .dns_type_mapping[iaas.type] ))
