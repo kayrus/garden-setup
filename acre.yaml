@@ -150,7 +150,7 @@ landscape:
   gardener:
   cert-manager:
     <<: (( merge ))
-    server: (( merge none // type( stub() ) == "map" ? stub() :{ "url" = stub() } ))
+    server: (( merge none // valid( stub() ) ? ( type( stub() ) == "map" ? stub() :{ "url" = stub() } ) :{"url" = "self-signed"} ))
   dns:
     <<: (( merge ))
     type: (( .dns_type_mapping[iaas.type] ))
@@ -180,6 +180,7 @@ backup_type_mapping:
 validation:
   <<: (( &temporary ))
   is_in: (( |e,l|-> [contains(l, e), "valid", "invalid value '" e "'"] ))
+  email_regex: "[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*@[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$"
   types:
     iaas:
       gcp:
@@ -271,13 +272,35 @@ validation:
   openstack_config: (( landscape.iaas.type == "openstack" ? validate( landscape.iaas.openstack, types.iaas.openstack.config ) :~ ))
   dns_type: (( validate( landscape.dns.type, [is_in, keys( types.dns )] ) ))
   dns_creds: (( validate( landscape.dns.credentials, types.dns[landscape.dns.type].credentials ) ))
+  cert-manager:
+    spec:
+      - and
+      - - optionalfield
+        - email
+        - - match
+          - (( validation.email_regex ))
+      - - mapfield
+        - server
+        - - and
+          - - mapfield
+            - url
+            - - or
+              - ["valueset", ["self-signed", "staging", "live"]]
+              - dnsdomain
+          - - optionalfield
+            - ca
+            - ["and", [(( certvalidator_selfsigned )), (( landscape.cert-manager.server.url ))], [(( certvalidator_acme )), (( landscape.cert-manager.server.url ))]]
+    certvalidator_selfsigned: (( |ca,url|-> [url == "self-signed" ? valid( ca.crt ) -and valid( ca.key ) :true, "valid", "if 'landscape.cert-manager.server.url' is set to 'self-signed', you should either specify a CA with key ('server.ca.crt' and 'server.ca.key' set), or no CA at all ('server.ca' node not present)"] ))
+    certvalidator_acme: (( |ca,url|-> [url != "self-signed" ? valid( ca.crt ) -and ( ! defined( ca.key ) ) :true, "if 'landscape.cert-manager.server.url' is not set to 'self-signed', you should either specify a CA without key ('server.ca.crt' set, no 'server.ca.key'), or the 'server.ca' node should not be present at all"] ))
+    certvalidator_email: (( |ca,id|-> [valid( ca.email ) -or valid( id.users[0].email ), "either 'landscape.cert-manager.email' or 'landscape.identity.users[0].email' needs to be set"] ))
+    validator: (( validate( landscape.cert-manager, validation.cert-manager.spec, [validation.cert-manager.certvalidator_email, landscape.identity] ) ))
   identity:
     userspec:
       - and
       - - mapfield
         - email
         - - match
-          - "[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*@[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$"
+          - (( validation.email_regex ))
       - - mapfield
         - username
       - - or
